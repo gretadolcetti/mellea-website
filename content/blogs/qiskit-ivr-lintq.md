@@ -49,22 +49,28 @@ property that matters for a repair loop.
 
 The setup follows the earlier posts: Mellea's `m.instruct()` with a
 requirement and a `MultiTurnStrategy`. The difference is that the
-requirement's validator now runs two checks in sequence:
+requirement's validation function now runs two checks in sequence:
 
 ```python
-def make_validator(problem, attempts):
-    def validate(model_output) -> ValidationResult:
-        code = extract_code_from_markdown(_as_text(model_output))
+from mellea.stdlib.requirements import req, simple_validate
+from validation_helpers import extract_code_from_markdown, validate_correctness, validate_lintq
 
-        passed, error_msg = validate_correctness(problem, code)
-        if not passed:
-            return ValidationResult(False, reason=error_msg)
 
-        passed, error_msg = validate_lintq(code)
-        return ValidationResult(passed, reason=error_msg)
+def tests_and_lintq(problem: dict):
+    def check(output: str) -> tuple[bool, str]:
+        code = extract_code_from_markdown(output)
+        passed, reason = validate_correctness(problem, code)
+        return validate_lintq(code) if passed else (passed, reason)
 
-    return validate
+    return req(
+        "The code must pass the problem's test suite and raise no LintQ warnings",
+        validation_fn=simple_validate(check),
+    )
 ```
+
+`simple_validate` hands `check()` the model's latest output as a string, and
+turns the `(passed, reason)` tuple it returns into a validation result whose
+reason becomes the repair feedback.
 
 Correctness goes first, because there's no point linting a program that
 doesn't run. `validate_correctness()` executes the code against the
@@ -89,24 +95,22 @@ def validate_lintq(code: str) -> tuple[bool, str]:
     return False, f"LintQ warnings:\n{findings_text}"
 ```
 
-Both validators return `(is_valid, error_message)`, so whichever one fails
-passes its message back to the model as the reason for the next attempt.
-Wiring it into Mellea is the same `m.instruct()` call as before:
+Wiring it into Mellea is the same `m.instruct()` call as before. Each problem
+gets its own session with a fresh `ChatContext`, so one task's repair
+conversation never leaks into the next:
 
 ```python
-result = m.instruct(
-    problem["prompt"],
-    requirements=[
-        req(
-            "The code must be a complete, runnable Qiskit v2 program that passes "
-            "the problem's test suite and raises no LintQ warnings. "
-            "Return only Python code.",
-            validation_fn=make_validator(problem, attempts),
-        )
-    ],
-    strategy=MultiTurnStrategy(loop_budget=3),
-    return_sampling_results=True,
-)
+from mellea import start_session
+from mellea.stdlib.context import ChatContext
+from mellea.stdlib.sampling import MultiTurnStrategy
+
+with start_session(backend_name="<backend>", model_id="<model-id>", ctx=ChatContext()) as m:
+    result = m.instruct(
+        problem["prompt"],
+        requirements=[tests_and_lintq(problem)],
+        strategy=MultiTurnStrategy(loop_budget=3),
+        return_sampling_results=True,
+    )
 ```
 
 Each problem gets a fresh `ChatContext`, so one task's repair conversation
