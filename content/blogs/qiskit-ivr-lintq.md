@@ -141,6 +141,18 @@ The loop budget was three attempts: the first generation plus up to two
 repairs. "First pass" is generation 0 on its own; "post repair" is the
 outcome of the whole loop.
 
+To reproduce these numbers, this is the setup we used:
+
+| Component | Version or setting |
+| --- | --- |
+| Model | `gpt-oss-120b`, served through an OpenAI-compatible endpoint and called with Mellea's `OpenAIBackend` |
+| Strategy | `MultiTurnStrategy(loop_budget=3)` |
+| Python | 3.12.8 |
+| Mellea | 0.7.0 |
+| Qiskit | `qiskit` 2.4.2, `qiskit-aer` 0.17.2, `qiskit-ibm-runtime` 0.45.1, `qiskit-ibm-transpiler` 0.18.0 |
+| CodeQL CLI | 2.26.3 |
+| IBM Quantum account | Saved using (`QiskitRuntimeService.save_account(...)`) |
+
 > **Note:** LintQ only runs on programs that pass their tests. If the
 > "Flagged by LintQ" or "LintQ warnings raised" count goes up after repair,
 > it's only because the loop fixed correctness for more programs, so more of
