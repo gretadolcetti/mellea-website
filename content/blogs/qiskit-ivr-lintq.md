@@ -80,19 +80,37 @@ passes the tests gets linted.
 
 `validate_lintq()` writes the code to a temporary directory, builds a
 CodeQL database from it, runs the `LintQ-all.qls` query suite, and turns the
-SARIF results into repair feedback.
+SARIF results into repair feedback, one `[rule-id] message` line per finding:
 
 ```python
-def validate_lintq(code: str) -> tuple[bool, str]:
-    findings = run_lintq(code)
-    if not findings:
-        return True, ""
+import json
+import os
+import subprocess
+import tempfile
 
-    findings_text = "\n".join(
-        f"[{f.get('ruleId', '?')}] {f.get('message', {}).get('text', '')}"
-        for f in findings
-    )
-    return False, f"LintQ warnings:\n{findings_text}"
+
+def validate_lintq(code: str) -> tuple[bool, str]:
+    lintq = os.environ["LINTQ_DIR"]
+    with tempfile.TemporaryDirectory() as tmp:
+        os.makedirs(f"{tmp}/src")
+        with open(f"{tmp}/src/candidate.py", "w") as f:
+            f.write(code)
+        for cmd in (
+            ["database", "create", f"{tmp}/db", "--language=python", f"--source-root={tmp}/src"],
+            [
+                "database", "analyze", f"{tmp}/db", f"{lintq}/LintQ-all.qls",
+                "--format=sarifv2.1.0", f"--output={tmp}/out.sarif",
+                f"--additional-packs={lintq}/qlint/codeql/src:{lintq}/qlint/codeql/lib",
+            ],
+        ):
+            subprocess.run(["codeql", *cmd], check=True, capture_output=True)
+        with open(f"{tmp}/out.sarif") as f:
+            results = [r for run in json.load(f)["runs"] for r in run["results"]]
+
+    if not results:
+        return True, ""
+    findings = "\n".join(f"[{r['ruleId']}] {r['message']['text']}" for r in results)
+    return False, f"LintQ warnings:\n{findings}"
 ```
 
 Wiring it into Mellea is the same `m.instruct()` call as before. Each problem
@@ -112,11 +130,6 @@ with start_session(backend_name="<backend>", model_id="<model-id>", ctx=ChatCont
         return_sampling_results=True,
     )
 ```
-
-Each problem gets a fresh `ChatContext`, so one task's repair conversation
-never leaks into the next. The validator also records both verdicts for
-every generation, which is how the tables below can tell a test failure
-apart from a LintQ rejection.
 
 ## Results
 
