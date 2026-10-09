@@ -210,8 +210,28 @@ A few practical notes if you want to try LintQ in your own loop:
   'qc' has more qubits (1) than classical bits (0)` tells the model which
   rule fired and on which circuit.
 
-LintQ is available at [sola-st/LintQ](https://github.com/sola-st/LintQ) and
-needs the [CodeQL CLI](https://codeql.github.com/) on your `PATH`. The
-Qiskit IVR example this work builds on is in the
+## Try it
+
+LintQ is a set of CodeQL queries, so it needs the CodeQL CLI and a checkout
+of the LintQ repository:
+
+1. Install the
+   [CodeQL CLI](https://docs.github.com/en/code-security/codeql-cli/getting-started-with-the-codeql-cli/setting-up-the-codeql-cli)
+   and put `codeql` on your `PATH` (`brew install codeql` works on macOS).
+   Check it with `codeql version`.
+2. Clone LintQ and install its query pack dependencies:
+
+   ```bash
+   git clone --depth 1 https://github.com/sola-st/LintQ.git
+   (cd LintQ/qlint/codeql/src && codeql pack install)
+   ```
+
+3. Point `LINTQ_DIR` at the checkout:
+
+   ```bash
+   export LINTQ_DIR="$(pwd)/LintQ"
+   ```
+
+
 [Mellea repo](https://github.com/generative-computing/mellea/tree/main/docs/examples/instruct_validate_repair/qiskit_code_validation).
 Adding LintQ to it means adding one more validation function.
